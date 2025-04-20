@@ -1,0 +1,5 @@
+data_dir: ./data
+
+# Set the configs of data loading.
+load_rgb: True
+downsample_factor: 25 #[1, 300]
