@@ -1,6 +1,6 @@
-regressor__algorithm: auto
-regressor__leaf_size: 10
-regressor__metric: minkowski
-regressor__n_neighbors: 3
+regressor__algorithm: kd_tree
+regressor__leaf_size: 50
+regressor__metric: manhattan
+regressor__n_neighbors: 2
 regressor__p: 1
 regressor__weights: distance

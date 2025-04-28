@@ -1,5 +1,5 @@
 from utils import load_config, load_dataset, load_test_dataset, load_validation_dataset, print_results, save_results, grade, RS, GS, load_params
-from processing import  hog_extract, canny_extract, filter_outliers_zscore, augment_noise, crop_center, extract_lbp_features
+from processing import  filter_outliers_zscore, augment_noise, crop_center, extract_lbp_features
 
 # sklearn imports...
 
@@ -25,7 +25,13 @@ def main():
     # Load test dataset for validation
     val_im, val_d = load_validation_dataset(config)
     print(f"[INFO]: Validation dataset loaded with {len(val_im)} samples.")
-    
+    # combine datasets for hand-in
+    images = np.concatenate((images, val_im), axis=0)
+    distances = np.concatenate((distances, val_d), axis=0)
+
+    # Load test dataset for hand-in
+    test_im = load_test_dataset(config)
+    print(f"[INFO]: Test dataset loaded with {len(test_im)} samples.")
 
     # preprocessing
     pipe = Pipeline([
@@ -37,37 +43,37 @@ def main():
     # Parameter Matrix
     params = load_params()
     for key, value in params.items():
-        pipe.set_params(**{key : value})    
-    
-    # Feature Selection
-    images_features = np.hstack((hog_extract(images), canny_extract(images)))
-    val_im_features = np.hstack((hog_extract(val_im), canny_extract(val_im)))
+        pipe.set_params(**{key : value})        
 
     # Filter dataset
-    images_features, distances = filter_outliers_zscore(images_features, distances, threshold=3)
-    print(f"[INFO]: Dataset after outlier removal: {len(images_features)} samples.")
+    images, distances = filter_outliers_zscore(images, distances, threshold=3)
+    print(f"[INFO]: Dataset after outlier removal: {len(images)} samples.")
 
     # Model Fitting
-    pipe.fit(images_features, distances)
+    pipe.fit(images, distances)
     # Model Prediction
-    pred = pipe.predict(val_im_features)
+    pred = pipe.predict(test_im)
 
-    # Save predictions, ground truth, and differences to CSV
-    results_df = pd.DataFrame({
-        'Ground Truth': val_d,
-        'Predictions': pred,
-        'Difference': np.abs(val_d - pred)
-    })
-    # Verteilungsplot der Differenzen
-    plt.figure(figsize=(10, 6))
-    sns.histplot(results_df['Difference'], kde=True, bins=30, color='blue')
-    plt.title("Verteilung der Differenzen zwischen Ground Truth und Predictions", fontsize=16)
-    plt.xlabel("Differenz", fontsize=14)
-    plt.ylabel("Häufigkeit", fontsize=14)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.show()
+    # Save predictions to CSV
+    save_results(pred)
+    if input("Plot the distribution of differences? (Y/N)") == "Y":
+        # Save predictions, ground truth, and differences to CSV
+        results_df = pd.DataFrame({
+            'Ground Truth': val_d,
+            'Predictions': pred,
+            'Difference': np.abs(val_d - pred)
+        })
 
-    print_results(val_d, pred)
+        # Verteilungsplot der Differenzen
+        plt.figure(figsize=(10, 6))
+        sns.histplot(results_df['Difference'], kde=True, bins=30, color='blue')
+        plt.title("Verteilung der Differenzen zwischen Ground Truth und Predictions", fontsize=16)
+        plt.xlabel("Differenz", fontsize=14)
+        plt.ylabel("Häufigkeit", fontsize=14)
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        plt.show()
+
+    #print_results(val_d, pred)
 
 
 def train():
@@ -82,10 +88,10 @@ def train():
         ('minmaxscaler', MinMaxScaler()),
         ('regressor', KNeighborsRegressor())
     ])
-    
-    # Feature Selection
-    images_features = np.hstack((hog_extract(images), canny_extract(images)))
 
+    # Filter dataset
+    images, distances = filter_outliers_zscore(images, distances, threshold=3)
+    print(f"[INFO]: Dataset after outlier removal: {len(images)} samples.")
     # Call the RS to perform tuning
     best_params = RS(pipe, 500, images, distances)
 
@@ -97,6 +103,7 @@ def train():
         yaml.dump(best_params, f)
 
 if __name__ == "__main__":
-    #train()
+    if input("Hyperparameter Search? (Y/N)") == "Y":
+        train()
     main()
 

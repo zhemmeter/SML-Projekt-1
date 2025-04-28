@@ -159,19 +159,19 @@ def RS(regressor, iterations, images, distances):
     
     #create the random grid
     random_grid = {
-        'regressor__n_neighbors': [3, 5, 10, 15, 20],  # Spread across a range of neighbors
-        'regressor__weights': ['uniform', 'distance'],  # Different weighting strategies
-        'regressor__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],  # Various algorithms
-        'regressor__leaf_size': [10, 20, 30, 50],  # Spread across different leaf sizes
-        'regressor__p': [1, 2],  # Manhattan (1) and Euclidean (2) distances
-        'regressor__metric': ['minkowski', 'manhattan', 'euclidean'],  # Different distance metrics
+        'regressor__n_neighbors': [1,2],
+        'regressor__weights': ['distance'],
+        'regressor__algorithm': ['kd_tree'],
+        'regressor__leaf_size': [50, 55],
+        'regressor__p': [1],
+        'regressor__metric': ['manhattan'],
     }
     
     rdm_regr = RandomizedSearchCV(estimator = regressor, 
                                   param_distributions = random_grid, 
                                   n_iter = iterations, 
                                   cv = 3, 
-                                  verbose = 2, 
+                                  verbose = 3, 
                                   random_state = 42, 
                                   n_jobs = -1
                                   )
