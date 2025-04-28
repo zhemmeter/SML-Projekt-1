@@ -1,11 +1,15 @@
-from utils import load_config, load_dataset, load_test_dataset, load_validation_dataset, print_results, save_results, grade, RS, GS, load_params, hog_extract, canny_extract
+from utils import load_config, load_dataset, load_test_dataset, load_validation_dataset, print_results, save_results, grade, RS, GS, load_params
+from processing import  hog_extract, canny_extract, filter_outliers_zscore, augment_noise, crop_center, extract_lbp_features
 
 # sklearn imports...
 
 import numpy as np
 import pandas as pd
 import yaml
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
@@ -21,30 +25,47 @@ def main():
     # Load test dataset for validation
     val_im, val_d = load_validation_dataset(config)
     print(f"[INFO]: Validation dataset loaded with {len(val_im)} samples.")
-
-
+    
 
     # preprocessing
     pipe = Pipeline([
         ('standardscaler', StandardScaler()),
         ('minmaxscaler', MinMaxScaler()),
-        ('selector', SelectFromModel(GradientBoostingRegressor())),
-        ('regressor', GradientBoostingRegressor())
+        ('regressor', KNeighborsRegressor())
     ])
 
     # Parameter Matrix
     params = load_params()
     for key, value in params.items():
-        pipe.set_params(**{f"selector__estimator__{key}": value})
-        pipe.set_params(**{f"regressor__{key}": value})    
+        pipe.set_params(**{key : value})    
     
     # Feature Selection
     images_features = np.hstack((hog_extract(images), canny_extract(images)))
     val_im_features = np.hstack((hog_extract(val_im), canny_extract(val_im)))
 
+    # Filter dataset
+    images_features, distances = filter_outliers_zscore(images_features, distances, threshold=3)
+    print(f"[INFO]: Dataset after outlier removal: {len(images_features)} samples.")
+
     # Model Fitting
-    pipe.fit(images_features,distances)
+    pipe.fit(images_features, distances)
+    # Model Prediction
     pred = pipe.predict(val_im_features)
+
+    # Save predictions, ground truth, and differences to CSV
+    results_df = pd.DataFrame({
+        'Ground Truth': val_d,
+        'Predictions': pred,
+        'Difference': np.abs(val_d - pred)
+    })
+    # Verteilungsplot der Differenzen
+    plt.figure(figsize=(10, 6))
+    sns.histplot(results_df['Difference'], kde=True, bins=30, color='blue')
+    plt.title("Verteilung der Differenzen zwischen Ground Truth und Predictions", fontsize=16)
+    plt.xlabel("Differenz", fontsize=14)
+    plt.ylabel("Häufigkeit", fontsize=14)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.show()
 
     print_results(val_d, pred)
 
@@ -59,30 +80,14 @@ def train():
     pipe = Pipeline([
         ('standardscaler', StandardScaler()),
         ('minmaxscaler', MinMaxScaler()),
-        ('selector', SelectFromModel(GradientBoostingRegressor())),
-        ('regressor', GradientBoostingRegressor())
+        ('regressor', KNeighborsRegressor())
     ])
     
     # Feature Selection
     images_features = np.hstack((hog_extract(images), canny_extract(images)))
 
-    # Set selector parameters
-    pipe.set_params(selector__estimator__n_estimators=550)
-    pipe.set_params(selector__estimator__max_depth=14)
-    pipe.set_params(selector__estimator__min_samples_split=7)
-    pipe.set_params(selector__estimator__min_samples_leaf=2)
-    pipe.set_params(selector__estimator__max_features='sqrt')
-    pipe.set_params(selector__estimator__loss='squared_error')
-    pipe.set_params(selector__estimator__learning_rate=0.05)
-    pipe.set_params(selector__estimator__subsample=0.7)
-    pipe.set_params(selector__estimator__min_weight_fraction_leaf=0.0)
-    pipe.set_params(selector__estimator__min_impurity_decrease=0.0)
-    pipe.set_params(selector__estimator__alpha=0.9999)
-    pipe.set_params(selector__estimator__max_leaf_nodes=35)
-
-
     # Call the RS to perform tuning
-    best_params = GS(pipe, images, distances)
+    best_params = RS(pipe, 500, images, distances)
 
     # Print the best parameters
     print(f"Best parameters: {best_params}")
@@ -92,6 +97,6 @@ def train():
         yaml.dump(best_params, f)
 
 if __name__ == "__main__":
-    # train()
+    #train()
     main()
 
