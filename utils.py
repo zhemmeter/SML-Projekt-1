@@ -10,8 +10,8 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import MinMaxScaler
-from skimage.feature import hog, canny, local_binary_pattern
-from skimage.transform import rotate
+
+
 
 IMAGE_SIZE = (300, 300)
 
@@ -159,25 +159,19 @@ def RS(regressor, iterations, images, distances):
     
     #create the random grid
     random_grid = {
-        'regressor__loss': ['squared_error'], 
-        'regressor__learning_rate': [0.03, 0.02],  # Spread around 0.05
-        'regressor__n_estimators': [600],  # Spread around 600
-        'regressor__subsample': [0.7],  # Spread around 0.7
-        'regressor__min_samples_split': [7, 6],  # Spread around 6, 7, 8
-        'regressor__min_samples_leaf': [1, 2],  # Spread around 2
-        'regressor__min_weight_fraction_leaf': [0.0],  # Keep as is
-        'regressor__max_depth': [12, 14, 15],  # Spread around 14, 15, 16
-        'regressor__min_impurity_decrease': [0.0],  # Keep as is
-        'regressor__max_features': ['sqrt'],  # Add more options
-        'regressor__alpha': [0.9999],  # Spread around 0.9999
-        'regressor__max_leaf_nodes': [30, 25]  # Spread around 25, 30, 35
+        'regressor__n_neighbors': [3, 5, 10, 15, 20],  # Spread across a range of neighbors
+        'regressor__weights': ['uniform', 'distance'],  # Different weighting strategies
+        'regressor__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],  # Various algorithms
+        'regressor__leaf_size': [10, 20, 30, 50],  # Spread across different leaf sizes
+        'regressor__p': [1, 2],  # Manhattan (1) and Euclidean (2) distances
+        'regressor__metric': ['minkowski', 'manhattan', 'euclidean'],  # Different distance metrics
     }
     
     rdm_regr = RandomizedSearchCV(estimator = regressor, 
                                   param_distributions = random_grid, 
                                   n_iter = iterations, 
                                   cv = 3, 
-                                  verbose = 1, 
+                                  verbose = 2, 
                                   random_state = 42, 
                                   n_jobs = -1
                                   )
@@ -216,65 +210,3 @@ def GS(regressor, images, distances):
     grid_search.fit(images, distances)
 
     return grid_search.best_params_
-
-# DYI: added hog feature extraction function
-def hog_extract(images):
-    hog_feature_list = []
-    for image in images:
-        image = image.reshape(int(len(image)**(0.5)), int(len(image)**(0.5)))
-        # HOG features
-        hog_feature = hog(image, pixels_per_cell=(16, 16), cells_per_block=(4, 4))
-        hog_feature_list.append(hog_feature)
-    
-    return np.array(hog_feature_list)
-
-# DYI: added canny feature extraction function
-def canny_extract(images):
-    canny_feature_list = []
-    for image in images:
-        image = image.reshape(int(len(image)**(0.5)), int(len(image)**(0.5)))
-
-        # Canny features
-        canny_edges = canny(image)
-        edge_density = np.sum(canny_edges) / canny_edges.size
-        canny_feature = edge_density.flatten()
-        canny_feature_list.append(canny_feature)
-    
-    return np.array(canny_feature_list)
-
-
-# DYI: added function to crop the center of the image
-def crop_center(image, crop_size=(150, 150)):
-    center_x, center_y = image.shape[1] // 2, image.shape[0] // 2
-    half_crop_x, half_crop_y = crop_size[1] // 2, crop_size[0] // 2
-    return image[center_y - half_crop_y:center_y + half_crop_y, center_x - half_crop_x:center_x + half_crop_x]
-
-# DYI: added function to rotate the image
-def augment_rotation(image, angle_range=(-30, 30)):
-    angle = np.random.uniform(*angle_range)
-    return rotate(image, angle, mode='wrap')
-
-def augment_flip(image, horizontal=True, vertical=False):
-    if horizontal:
-        image = np.fliplr(image)
-    if vertical:
-        image = np.flipud(image)
-    return image
-
-def augment_brightness(image, factor_range=(0.8, 1.2)):
-    factor = np.random.uniform(*factor_range)
-    return np.clip(image * factor, 0, 255)
-
-def augment_noise(image, mean=0, std=0.01):
-    noise = np.random.normal(mean, std, image.shape)
-    return np.clip(image + noise, 0, 255)
-
-def extract_lbp_features(images, P=8, R=1):
-    lbp_features = []
-    for image in images:
-        image = image.reshape(int(len(image)**0.5), int(len(image)**0.5))  # Reshape to 2D
-        lbp = local_binary_pattern(image, P=P, R=R, method='uniform')
-        lbp_hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, P + 3), range=(0, P + 2))
-        lbp_hist = lbp_hist / np.sum(lbp_hist)  # Normalize histogram
-        lbp_features.append(lbp_hist)
-    return np.array(lbp_features)
