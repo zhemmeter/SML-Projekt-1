@@ -17,6 +17,8 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.feature_selection import SelectFromModel
 
 def main():
+    kaggle = input("[PROMPT]: Kaggle Mode? (Y/N)")
+
     # Load configs from "config.yaml"
     config = load_config()
     # Load dataset: images and corresponding minimum distance values
@@ -25,24 +27,29 @@ def main():
     # Load test dataset for validation
     val_im, val_d = load_validation_dataset(config)
     print(f"[INFO]: Validation dataset loaded with {len(val_im)} samples.")
-    # combine datasets for hand-in
-    images = np.concatenate((images, val_im), axis=0)
-    distances = np.concatenate((distances, val_d), axis=0)
 
-    # Load test dataset for hand-in
-    test_im = load_test_dataset(config)
-    print(f"[INFO]: Test dataset loaded with {len(test_im)} samples.")
+    
+    if kaggle == "Y":
+        # Combine datasets for hand-in
+        images = np.concatenate((images, val_im), axis=0)
+        distances = np.concatenate((distances, val_d), axis=0)
 
-    # preprocessing
+        # Load test dataset for hand-in
+        test_im = load_test_dataset(config)
+        print(f"[INFO]: Test dataset loaded with {len(test_im)} samples.")
+
+
+    # Preprocessing pipeline
     pipe = Pipeline([
         ('standardscaler', StandardScaler()),
         ('minmaxscaler', MinMaxScaler()),
-        ('regressor', KNeighborsRegressor())
+        ('regressor', KNeighborsRegressor())  # Use VotingRegressor as the final step
     ])
 
     # Parameter Matrix
     params = load_params()
     for key, value in params.items():
+        print(f"[INFO]: Setting parameter: {key} = {value}")
         pipe.set_params(**{key : value})        
 
     # Filter dataset
@@ -51,12 +58,20 @@ def main():
 
     # Model Fitting
     pipe.fit(images, distances)
-    # Model Prediction
-    pred = pipe.predict(test_im)
 
-    # Save predictions to CSV
-    save_results(pred)
-    if input("Plot the distribution of differences? (Y/N)") == "Y":
+    
+    if kaggle == "Y":
+        # Private Set Prediction
+        pred = pipe.predict(test_im)
+        # Save predictions to CSV
+        save_results(pred)
+
+
+    
+    else:
+        # Validation Set Prediction
+        pred = pipe.predict(val_im)
+
         # Save predictions, ground truth, and differences to CSV
         results_df = pd.DataFrame({
             'Ground Truth': val_d,
@@ -64,7 +79,7 @@ def main():
             'Difference': np.abs(val_d - pred)
         })
 
-        # Verteilungsplot der Differenzen
+        # Plot of the differences
         plt.figure(figsize=(10, 6))
         sns.histplot(results_df['Difference'], kde=True, bins=30, color='blue')
         plt.title("Verteilung der Differenzen zwischen Ground Truth und Predictions", fontsize=16)
@@ -73,7 +88,8 @@ def main():
         plt.grid(axis='y', linestyle='--', alpha=0.7)
         plt.show()
 
-    #print_results(val_d, pred)
+        # Print MAE & grade approximation
+        print_results(val_d, pred)
 
 
 def train():
@@ -82,11 +98,24 @@ def train():
     # Load dataset: images and corresponding minimum distance values
     images, distances = load_dataset(config)
     print(f"[INFO]: Dataset loaded with {len(images)} samples.")
-    # Define the Regressor
+
+    # Define the base regressors
+    knn = KNeighborsRegressor()
+    #rf = RandomForestRegressor(random_state=42)
+    gbr = GradientBoostingRegressor(random_state=42)
+
+    # Define the VotingRegressor
+    voting_regressor = VotingRegressor([
+        ('knn', knn),
+        #('rf', rf),
+        ('gbr', gbr)
+    ])
+
+    # Preprocessing pipeline
     pipe = Pipeline([
         ('standardscaler', StandardScaler()),
         ('minmaxscaler', MinMaxScaler()),
-        ('regressor', KNeighborsRegressor())
+        ('regressor', voting_regressor)  # Use VotingRegressor as the final step
     ])
 
     # Filter dataset
@@ -103,7 +132,7 @@ def train():
         yaml.dump(best_params, f)
 
 if __name__ == "__main__":
-    if input("Hyperparameter Search? (Y/N)") == "Y":
+    if input("[PROMPT]: Hyperparameter Search? (Y/N)") == "Y":
         train()
     main()
 
